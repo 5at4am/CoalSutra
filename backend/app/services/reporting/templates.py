@@ -4,6 +4,10 @@ Plain Python dicts on purpose — no templating engine. Each template declares
 its section order, per-section drafting instructions, and the entity hints that
 help the generator pick relevant facts. The generator turns this into
 `content: {"sections": {...}}` on a `Report` row.
+
+Every template leads with an `executive_summary` (the PDF renders it right after
+the table of contents) and closes with `sources` (automatic), with the analytical
+body in between.
 """
 
 from __future__ import annotations
@@ -33,6 +37,14 @@ REPORT_TEMPLATES: dict[str, dict] = {
         "description": "Coal production, overburden removal and dispatch figures.",
         "sections": [
             _section(
+                "executive_summary",
+                "Executive Summary",
+                "Write a 120-150 word executive summary covering the period in "
+                "scope, the headline volumes (production, overburden, dispatch), "
+                "and the single most material movement or deviation. Cite every "
+                "figure.",
+            ),
+            _section(
                 "overview",
                 "Overview",
                 "Summarise the period covered, the operations in scope, and the "
@@ -47,15 +59,19 @@ REPORT_TEMPLATES: dict[str, dict] = {
             _section(
                 "trends",
                 "Trends",
-                "Describe month-over-month or period-over-period movement visible in "
-                "the cited figures. If the data does not support a trend, say so.",
+                "Compare dated figures period-over-period. For every entity that has "
+                "at least two dated values, quantify the movement in absolute terms "
+                "and as a percentage, and name the largest single-period move. If the "
+                "data does not support a trend, say so explicitly.",
             ),
             _section(
-                "sources",
-                "Sources",
-                "Aggregate all cited sources below.",
-                automatic=True,
+                "observations",
+                "Observations",
+                "Interpret the figures for management: call out anomalies, outliers, "
+                "notable ratios (e.g. production vs overburden), and anything that "
+                "warrants attention. Only claims supported by the cited facts.",
             ),
+            _section("sources", "Sources", "Aggregate all cited sources below.", automatic=True),
         ],
     },
     "coal_quality_report": {
@@ -64,6 +80,12 @@ REPORT_TEMPLATES: dict[str, dict] = {
         "entity_hints": ["ash_content", "moisture_content", "sulfur_content", "grade", "gcv"],
         "description": "Quality parameters: ash, moisture, sulphur, grade / GCV.",
         "sections": [
+            _section(
+                "executive_summary",
+                "Executive Summary",
+                "Write a 120-150 word executive summary of the overall quality picture "
+                "and the parameter most out of line with expectations. Cite every figure.",
+            ),
             _section(
                 "overview",
                 "Overview",
@@ -79,7 +101,15 @@ REPORT_TEMPLATES: dict[str, dict] = {
                 "grade_analysis",
                 "Grade Analysis",
                 "Interpret how the quality parameters map to coal grades. Base it only "
-                "on the cited facts.",
+                "on the cited facts and name the governing parameter for any grade "
+                "conclusion.",
+            ),
+            _section(
+                "observations",
+                "Observations",
+                "Flag parameters that look out of tolerance, seams that stand apart, "
+                "and any data gaps (missing values, single observations) the reader "
+                "should keep in mind.",
             ),
             _section("sources", "Sources", "Aggregate all cited sources below.", automatic=True),
         ],
@@ -96,6 +126,13 @@ REPORT_TEMPLATES: dict[str, dict] = {
         "description": "Coal reserve estimates per block / seam.",
         "sections": [
             _section(
+                "executive_summary",
+                "Executive Summary",
+                "Write a 120-150 word executive summary of the reserve estimate: "
+                "total, key block/seam splits, and any movement vs earlier figures. "
+                "Cite every figure.",
+            ),
+            _section(
                 "overview",
                 "Overview",
                 "Summarise the reserve estimate: total, per block or seam, and the "
@@ -109,7 +146,15 @@ REPORT_TEMPLATES: dict[str, dict] = {
             _section(
                 "trends",
                 "Trends",
-                "Describe changes in reserve estimates across the cited dates, if any.",
+                "Compare reserve figures across the cited dates. Quantify any change in "
+                "absolute terms and percentage and name where it moved. If the data "
+                "does not support a trend, say so explicitly.",
+            ),
+            _section(
+                "observations",
+                "Observations",
+                "Interpret the reserve picture: concentration by block, any revisions "
+                "over time, and data gaps that affect confidence in the estimate.",
             ),
             _section("sources", "Sources", "Aggregate all cited sources below.", automatic=True),
         ],

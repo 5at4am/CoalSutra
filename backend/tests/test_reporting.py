@@ -122,7 +122,14 @@ def test_generate_report_saves_draft_with_structured_sections(session_factory):
         assert report.template_type == "production_summary"
         assert report.title == "Production Summary"
         sections = report.content["sections"]
-        assert set(sections) == {"overview", "key_figures", "trends", "sources"}
+        assert set(sections) == {
+            "executive_summary",
+            "overview",
+            "key_figures",
+            "trends",
+            "observations",
+            "sources",
+        }
 
         # non-automatic sections carry validated citations with the full format
         for key in ("overview", "key_figures", "trends"):
@@ -309,7 +316,14 @@ def test_api_report_lifecycle(client, tmp_path, monkeypatch):
     body = resp.json()
     report_id = body["id"]
     assert body["status"] == "draft"
-    assert set(body["content"]["sections"]) == {"overview", "key_figures", "trends", "sources"}
+    assert set(body["content"]["sections"]) == {
+        "executive_summary",
+        "overview",
+        "key_figures",
+        "trends",
+        "observations",
+        "sources",
+    }
 
     assert test_client.get(f"/api/v1/reports/{report_id}").status_code == 200
     assert test_client.get("/api/v1/reports/99999").status_code == 404

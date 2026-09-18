@@ -1,13 +1,20 @@
 """Export a `Report` to a structured, professional PDF (reportlab).
 
-Beyond the drafted narrative sections the PDF adds a brand cover block, an
-auto-built Key Metrics table of every in-scope fact, and an **Insight &
-Analysis** block computed deterministically from the stored facts (first/latest
-value, absolute + percentage change, trend direction, min/max, source count)
-plus a simple bar chart when a numeric series has at least two dated points.
-Every number rendered here traces back to the source document + page carried by
-the fact record — nothing is invented. Page headers/footers carry the brand,
-title and page number.
+Layout:
+
+1. **Cover page** — centred CoalSutra brand, report title, meta grid
+   (template / status / generated / scope), traceability tagline.
+2. **Contents** — numbered sections with page numbers (built via a two-pass
+   TableOfContents).
+3. **1. Executive Summary** — the template's executive summary draft.
+4. **2. Key Metrics** — every in-scope fact in a zebra table with its source.
+5. **3. Insight & Analysis** — DETERMINISTIC analytics (first/latest value,
+   absolute + % change, trend, min/max, biggest single-period move) plus native
+   vector bar charts, so nothing in this block is ever invented.
+6. **n. narrative template sections** — LLM-drafted prose, still cited.
+7. **last. References / Sources** — every cited document + page.
+
+Page headers carry the brand + report title; footers carry the page number.
 """
 
 from __future__ import annotations
@@ -23,13 +30,19 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import (
+    BaseDocTemplate,
+    Frame,
+    KeepTogether,
+    NextPageTemplate,
+    PageBreak,
+    PageTemplate,
     Paragraph,
-    SimpleDocTemplate,
     Spacer,
     Table,
     TableStyle,
 )
 from reportlab.platypus.flowables import HRFlowable
+from reportlab.platypus.tableofcontents import TableOfContents
 
 from app.core.config import settings
 from app.models import Report
@@ -41,10 +54,10 @@ _MAX_TABLE_ROWS = 40
 _MAX_CHARTS = 2
 
 _AMBER = colors.HexColor("#B45309")
-_AMBER_LIGHT = colors.HexColor("#FEF3C7")
 _SLATE = colors.HexColor("#334155")
 _SLATE_MUTED = colors.HexColor("#64748B")
 _BORDER = colors.HexColor("#CBD5E1")
+_GRID = colors.HexColor("#E2E8F0")
 _HEADER_FILL = colors.HexColor("#F1F5F9")
 
 _STYLE_BY_STATUS = {
@@ -60,9 +73,32 @@ def _styles():
         ParagraphStyle(
             name="CoverBrand",
             parent=styles["Normal"],
-            fontSize=10,
+            fontName="Helvetica-Bold",
+            fontSize=15,
             textColor=_AMBER,
+            alignment=1,
             spaceAfter=2,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="CoverTagline",
+            parent=styles["Normal"],
+            fontSize=9,
+            textColor=_SLATE_MUTED,
+            alignment=1,
+            spaceAfter=6,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="CoverTitle",
+            parent=styles["Title"],
+            fontSize=19,
+            textColor=_SLATE,
+            alignment=1,
+            spaceBefore=10,
+            spaceAfter=4,
         )
     )
     styles.add(
@@ -71,7 +107,6 @@ def _styles():
             parent=styles["Normal"],
             fontSize=9,
             textColor=_SLATE_MUTED,
-            spaceAfter=2,
         )
     )
     styles.add(
@@ -85,6 +120,40 @@ def _styles():
     )
     styles.add(
         ParagraphStyle(
+            name="SectionHeading",
+            parent=styles["Heading1"],
+            fontSize=13,
+            textColor=_SLATE,
+            spaceBefore=14,
+            spaceAfter=6,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="TOCHeading",
+            parent=styles["SectionHeading"],
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="SubHeading",
+            parent=styles["Heading2"],
+            fontSize=11,
+            textColor=_SLATE,
+            spaceBefore=10,
+            spaceAfter=4,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="TocEntry0",
+            parent=styles["Normal"],
+            fontSize=10.5,
+            leading=16,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
             name="InsightBullet",
             parent=styles["BodyText"],
             fontSize=9.5,
@@ -93,6 +162,60 @@ def _styles():
         )
     )
     return styles
+
+
+# --- document template (two-pass TOC) ---------------------------------------
+
+
+class _ReportDoc(BaseDocTemplate):
+    def __init__(self, filename, report_title: str, report_id: int | None, **kw):
+        super().__init__(filename, **kw)
+        self.report_title = report_title
+        self.report_id = report_id
+        frame = Frame(50, 58, A4[0] - 100, A4[1] - 138, id="body")
+        self.addPageTemplates(
+            [
+                PageTemplate(id="cover", frames=[frame], onPage=self._cover_page),
+                PageTemplate(id="content", frames=[frame], onPage=self._content_page),
+            ]
+        )
+
+    def afterFlowable(self, flowable):
+        if (
+            isinstance(flowable, Paragraph)
+            and getattr(flowable.style, "name", "") == "SectionHeading"
+        ):
+            self.notify("TOCEntry", (0, flowable.getPlainText(), self.page))
+
+    def _cover_page(self, canvas, doc):
+        canvas.saveState()
+        canvas.setStrokeColor(_AMBER)
+        canvas.setLineWidth(1.0)
+        canvas.line(50, 64, A4[0] - 50, 64)
+        canvas.setFillColor(_SLATE_MUTED)
+        canvas.setFont("Helvetica", 8)
+        canvas.drawCentredString(
+            A4[0] / 2, 48, "Every figure is traceable to a source document and page."
+        )
+        canvas.restoreState()
+
+    def _content_page(self, canvas, doc):
+        canvas.saveState()
+        canvas.setFillColor(_SLATE_MUTED)
+        canvas.setFont("Helvetica", 8)
+        canvas.drawString(50, A4[1] - 44, "CoalSutra — CMPDI Reporting Assistant")
+        canvas.drawRightString(A4[0] - 50, A4[1] - 44, _shorten(self.report_title, 70))
+        canvas.setStrokeColor(_AMBER)
+        canvas.setLineWidth(0.8)
+        canvas.line(50, A4[1] - 50, A4[0] - 50, A4[1] - 50)
+        canvas.setFont("Helvetica", 8)
+        ref = f"report {self.report_id}" if self.report_id else ""
+        canvas.drawString(50, 44, f"CoalSutra · {ref}" if ref else "CoalSutra")
+        canvas.drawRightString(A4[0] - 50, 44, f"Page {canvas.getPageNumber()}")
+        canvas.restoreState()
+
+
+# --- export ----------------------------------------------------------------
 
 
 def export_report(report: Report, output_path: str | Path | None = None) -> str:
@@ -110,14 +233,16 @@ def export_report(report: Report, output_path: str | Path | None = None) -> str:
         output_path = Path(output_path)
 
     styles = _styles()
-    doc = SimpleDocTemplate(
+    doc = _ReportDoc(
         str(output_path),
         pagesize=A4,
         title=report.title,
         leftMargin=50,
         rightMargin=50,
-        topMargin=66,
-        bottomMargin=66,
+        topMargin=80,
+        bottomMargin=58,
+        report_title=report.title,
+        report_id=report.id,
     )
 
     sections = (report.content or {}).get("sections", {})
@@ -126,121 +251,136 @@ def export_report(report: Report, output_path: str | Path | None = None) -> str:
     status_text = report.status.value
     status_color = _STYLE_BY_STATUS.get(status_text, "#334155")
 
-    story = _cover(report, scope, len(facts), status_text, status_color, styles)
-    story.extend(_key_metrics_block(facts, styles))
-    story.extend(_insight_analysis_block(facts, styles))
-    story.extend(_sections_block(sections, styles))
-    story.extend(_references_block(sections, styles))
+    story = _cover(report, scope, facts, status_text, status_color, styles)
+    story.append(NextPageTemplate("content"))
+    story.append(PageBreak())
+    story.append(Paragraph("Contents", styles["TOCHeading"]))
+    toc = TableOfContents()
+    toc.levelStyles = [styles["TocEntry0"]]
+    story.append(toc)
+    story.append(Spacer(1, 6 * mm))
 
-    doc.build(story, onFirstPage=_first_page, onLaterPages=_later_page)
+    counter = _Counter()
+    exec_section = sections.get("executive_summary")
+    if exec_section:
+        _push_section(
+            story, styles, counter.next(), "Executive Summary",
+            _section_flow(exec_section, styles, citations=False),
+        )
+    _push_section(
+        story, styles, counter.next(), "Key Metrics", _key_metrics_flow(facts, styles)
+    )
+    _push_section(
+        story, styles, counter.next(), "Insight & Analysis",
+        _insight_flow(facts, styles),
+    )
+    for key, section in sections.items():
+        if key in {"executive_summary", "sources"}:
+            continue
+        _push_section(
+            story, styles, counter.next(), section.get("title", key),
+            _section_flow(section, styles),
+        )
+    _push_section(
+        story, styles, counter.next(), "References / Sources",
+        _references_flow(sections, styles),
+    )
+
+    doc.multiBuild(story)
     logger.info("exporter: wrote report %s to %s", report.id, output_path)
     return str(output_path)
 
 
-# --- cover / page furniture ------------------------------------------------
+class _Counter:
+    def __init__(self) -> None:
+        self.value = 0
+
+    def next(self) -> int:
+        self.value += 1
+        return self.value
+
+
+def _push_section(story: list, styles, number: int, title: str, flow: list) -> None:
+    heading = Paragraph(f"{number}. {escape(title)}", styles["SectionHeading"])
+    if flow and isinstance(flow[0], Paragraph):
+        story.append(KeepTogether([heading, flow[0]]))
+        story.extend(flow[1:])
+    else:
+        story.append(heading)
+        story.extend(flow)
+    story.append(Spacer(1, 5 * mm))
+
+
+# --- cover ------------------------------------------------------------------
 
 
 def _cover(
     report: Report,
     scope: dict,
-    fact_count: int,
+    facts: list[dict],
     status_text: str,
     status_color: str,
     styles,
 ) -> list:
     story = [
-        Paragraph(
-            "<font color='#B45309'><b>COALSUTRA</b></font> — CMPDI Reporting Assistant",
-            styles["CoverBrand"],
-        ),
-        Spacer(1, 4 * mm),
-        Paragraph(escape(report.title), styles["Title"]),
-        HRFlowable(width="100%", thickness=1.2, color=_AMBER, spaceBefore=8, spaceAfter=12),
-        Paragraph(f"Template: {escape(report.template_type)}", styles["ReportMeta"]),
-        Paragraph(
-            f"Status: <font color='{status_color}'>{status_text}</font>",
-            styles["ReportMeta"],
-        ),
-        Paragraph(
-            f"Generated: {report.generated_at:%Y-%m-%d %H:%M}",
-            styles["ReportMeta"],
-        ),
+        Spacer(1, 30 * mm),
+        Paragraph("COALSUTRA", styles["CoverBrand"]),
+        Paragraph("CMPDI Reporting Assistant", styles["CoverTagline"]),
+        Paragraph(escape(report.title), styles["CoverTitle"]),
+        HRFlowable(width="45%", hAlign="CENTER", thickness=1.2, color=_AMBER,
+                   spaceBefore=6, spaceAfter=16),
     ]
-    if scope.get("entities"):
-        story.append(
-            Paragraph(f"Entities: {escape(', '.join(scope['entities']))}", styles["ReportMeta"])
-        )
-    if scope.get("date_from") or scope.get("date_to"):
-        dates = f"{scope.get('date_from', '...')} to {scope.get('date_to', '...')}"
-        story.append(Paragraph(f"Period: {escape(dates)}", styles["ReportMeta"]))
-    story.append(
-        Paragraph(
-            f"Scope: {fact_count} validated fact(s) in scope",
-            styles["ReportMeta"],
+
+    sources = sorted({f["document_name"] for f in facts if f.get("document_name")})
+    period_bits = []
+    if scope.get("date_from"):
+        period_bits.append(scope["date_from"])
+    if scope.get("date_to"):
+        period_bits.append("to " + scope["date_to"])
+    period = " ".join(period_bits) if period_bits else "full corpus"
+
+    meta = [
+        ["Template", report.template_type],
+        ["Status", f"<font color='{status_color}'><b>{status_text}</b></font>"],
+        ["Generated", f"{report.generated_at:%Y-%m-%d %H:%M}"],
+        ["Entities", (", ".join(scope.get("entities", [])) or "all extracted")],
+        ["Period", period],
+        ["Facts in scope", str(len(facts))],
+        ["Sources", str(len(sources))],
+    ]
+    table = Table(meta, colWidths=[120, 300], hAlign="CENTER")
+    table.setStyle(
+        TableStyle(
+            [
+                ("FONT", (0, 0), (0, -1), "Helvetica-Bold", 9),
+                ("FONT", (1, 0), (1, -1), "Helvetica", 9.5),
+                ("TEXTCOLOR", (0, 0), (0, -1), _SLATE_MUTED),
+                ("TEXTCOLOR", (1, 0), (1, -1), _SLATE),
+                ("TOPPADDING", (0, 0), (-1, -1), 3.5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ]
         )
     )
-    story.append(Spacer(1, 6 * mm))
+    story.append(table)
+    story.append(Spacer(1, 16 * mm))
     return story
 
 
-def _first_page(canvas, doc):
-    canvas.saveState()
-    canvas.setStrokeColor(_AMBER)
-    canvas.setLineWidth(1.2)
-    canvas.line(50, doc.bottomMargin + 26, A4[0] - 50, doc.bottomMargin + 26)
-    canvas.setFillColor(_SLATE_MUTED)
-    canvas.setFont("Helvetica", 8)
-    canvas.drawString(
-        50,
-        doc.bottomMargin + 12,
-        "Every figure is traceable to a source document and page.",
-    )
-    canvas.restoreState()
-    _footer(canvas, doc)
+# --- key metrics ------------------------------------------------------------
 
 
-def _later_page(canvas, doc):
-    canvas.saveState()
-    canvas.setFillColor(_SLATE_MUTED)
-    canvas.setFont("Helvetica", 8)
-    title = _shorten(doc.title or "Report", 78)
-    canvas.drawString(50, A4[1] - 22 * mm, "CoalSutra")
-    canvas.drawRightString(A4[0] - 50, A4[1] - 22 * mm, escape(title))
-    canvas.setStrokeColor(_AMBER)
-    canvas.setLineWidth(0.8)
-    canvas.line(50, A4[1] - 24 * mm, A4[0] - 50, A4[1] - 24 * mm)
-    canvas.restoreState()
-    _footer(canvas, doc)
-
-
-def _footer(canvas, doc):
-    canvas.saveState()
-    canvas.setFillColor(_SLATE_MUTED)
-    canvas.setFont("Helvetica", 8)
-    template = getattr(doc, "template_type", "")
-    canvas.drawString(50, 40, f"CoalSutra — {template}")
-    canvas.drawRightString(A4[0] - 50, 40, f"Page {canvas.getPageNumber()}")
-    canvas.restoreState()
-
-
-def _shorten(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[: limit - 1] + "…"
-
-
-# --- key metrics table ------------------------------------------------------
-
-
-def _key_metrics_block(facts: list[dict], styles) -> list:
-    story = [
-        Paragraph("Key Metrics", styles["Heading1"]),
+def _key_metrics_flow(facts: list[dict], styles) -> list:
+    flow = [
         Paragraph(
             "Every validated figure in scope, exactly as extracted, with its source.",
             styles["SectionIntro"],
-        ),
+        )
     ]
     if not facts:
-        story.append(Paragraph("No in-scope facts were available.", styles["BodyText"]))
-        return story
+        flow.append(Paragraph("No in-scope facts were available.", styles["BodyText"]))
+        return flow
 
     rows = [["Entity", "Value", "Unit", "Date", "Source", "Page", "Conf."]]
     for fact in _dedupe_facts(facts)[:_MAX_TABLE_ROWS]:
@@ -257,37 +397,36 @@ def _key_metrics_block(facts: list[dict], styles) -> list:
                 f"{conf * 100:.0f}%" if isinstance(conf, (int, float)) else "",
             ]
         )
-    cols = [100, 62, 45, 70, 110, 40, 40]
-    table = Table(rows, colWidths=cols, repeatRows=1)
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), _HEADER_FILL),
-                ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8.5),
-                ("FONT", (0, 1), (-1, -1), "Helvetica", 8.5),
-                ("TEXTCOLOR", (0, 0), (-1, 0), _SLATE),
-                ("GRID", (0, 0), (-1, -1), 0.4, _BORDER),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, _HEADER_FILL]),
-                ("ALIGN", (1, 0), (6, -1), "RIGHT"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ]
-        )
-    )
-    story.append(table)
+    table = Table(rows, colWidths=[100, 62, 45, 70, 110, 40, 40], repeatRows=1)
+    table.setStyle(_table_style())
+    flow.append(table)
     if len(_dedupe_facts(facts)) > _MAX_TABLE_ROWS:
-        story.append(
+        flow.append(
             Paragraph(
                 f"(Showing the first {_MAX_TABLE_ROWS} of "
                 f"{len(_dedupe_facts(facts))} facts.)",
                 styles["ReportMeta"],
             )
         )
-    story.append(Spacer(1, 5 * mm))
-    return story
+    return flow
+
+
+def _table_style() -> TableStyle:
+    return TableStyle(
+        [
+            ("BACKGROUND", (0, 0), (-1, 0), _HEADER_FILL),
+            ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8.5),
+            ("FONT", (0, 1), (-1, -1), "Helvetica", 8.5),
+            ("TEXTCOLOR", (0, 0), (-1, 0), _SLATE),
+            ("GRID", (0, 0), (-1, -1), 0.4, _BORDER),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, _HEADER_FILL]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]
+    )
 
 
 def _dedupe_facts(facts: list[dict]) -> list[dict]:
@@ -338,6 +477,19 @@ def _analytics(facts: list[dict]) -> list[dict]:
             trend = "up"
         elif changed and changed < 0:
             trend = "down"
+        largest_move = None
+        if len(points) > 2:
+            moves = []
+            for (from_date, from_value), (to_date, to_value) in zip(points, points[1:]):
+                delta = to_value - from_value
+                moves.append((abs(delta), {
+                    "from_date": from_date,
+                    "to_date": to_date,
+                    "delta": delta,
+                    "pct": delta / from_value * 100.0 if from_value else None,
+                }))
+            if moves:
+                largest_move = max(moves, key=lambda m: m[0])[1]
         rows.append(
             {
                 "entity": entity,
@@ -351,93 +503,69 @@ def _analytics(facts: list[dict]) -> list[dict]:
                 "trend": trend,
                 "min": min(v for _d, v in points),
                 "max": max(v for _d, v in points),
+                "largest_move": largest_move,
                 "points": points,
             }
         )
     return sorted(rows, key=lambda r: r["latest_value"], reverse=True)
 
 
-def _insight_analysis_block(facts: list[dict], styles) -> list:
-    story = [
-        Paragraph("Insight & Analysis", styles["Heading1"]),
+def _insight_flow(facts: list[dict], styles) -> list:
+    flow = [
         Paragraph(
             "Computed from the validated facts only; every figure stays traceable "
             "to its source row in Key Metrics.",
             styles["SectionIntro"],
-        ),
+        )
     ]
     analytics = _analytics(facts)
     if not analytics:
-        story.append(
+        flow.append(
             Paragraph(
                 "No numeric series available for trend analysis.",
                 styles["BodyText"],
             )
         )
-        story.append(Spacer(1, 5 * mm))
-        return story
+        return flow
 
     rows = [["Metric", "Period", "First", "Latest", "Change", "Trend"]]
     for row in analytics:
         period = f"{row['start_date'] or '...'} to {row['latest_date'] or '...'}"
-        change = _format_change(row["change"], row["pct"])
-        trend = {
-            "up": "up",
-            "down": "down",
-            "flat": "flat",
-        }.get(row["trend"], "flat")
         rows.append(
             [
                 escape(str(row["entity"])),
                 escape(period),
                 _format_number(row["start_value"]),
                 _format_number(row["latest_value"]),
-                change,
-                trend,
+                _format_change(row["change"], row["pct"]),
+                row["trend"],
             ]
         )
-    cols = [95, 115, 70, 70, 85, 40]
-    table = Table(rows, colWidths=cols, repeatRows=1)
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), _HEADER_FILL),
-                ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8.5),
-                ("FONT", (0, 1), (-1, -1), "Helvetica", 8.5),
-                ("TEXTCOLOR", (0, 0), (-1, 0), _SLATE),
-                ("GRID", (0, 0), (-1, -1), 0.4, _BORDER),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, _HEADER_FILL]),
-                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ]
-        )
-    )
-    story.append(table)
-    story.append(Spacer(1, 4 * mm))
+    table = Table(rows, colWidths=[95, 115, 70, 70, 85, 40], repeatRows=1)
+    table.setStyle(_table_style())
+    flow.append(table)
+    flow.append(Spacer(1, 3 * mm))
 
-    story.append(Paragraph("Highlights", styles["Heading2"]))
+    flow.append(Paragraph("Highlights", styles["SubHeading"]))
     for row in analytics:
-        story.append(Paragraph(f"• {_highlight_sentence(row)}", styles["InsightBullet"]))
+        flow.append(Paragraph(f"• {_highlight_sentence(row)}", styles["InsightBullet"]))
     widest = max(analytics, key=lambda r: r["count"])
-    story.append(
+    flow.append(
         Paragraph(
             f"• Widest coverage: {escape(str(widest['entity']))} with {widest['count']} "
             f"dated observation(s).",
             styles["InsightBullet"],
         )
     )
-    story.append(Spacer(1, 4 * mm))
+    flow.append(Spacer(1, 3 * mm))
 
     for row in analytics[:_MAX_CHARTS]:
-        chart = _bar_chart(row["entity"], row["points"])
-        story.append(Paragraph(f"Trend — {escape(str(row['entity']))}", styles["Heading2"]))
-        story.append(chart)
-        story.append(Spacer(1, 5 * mm))
-    return story
+        flow.append(
+            Paragraph(f"Trend — {escape(str(row['entity']))}", styles["SubHeading"])
+        )
+        flow.append(_bar_chart(row["entity"], row["points"]))
+        flow.append(Spacer(1, 3 * mm))
+    return flow
 
 
 def _highlight_sentence(row: dict) -> str:
@@ -451,11 +579,19 @@ def _highlight_sentence(row: dict) -> str:
         row["trend"], "held steady"
     )
     change = _format_change(row["change"], row["pct"])
-    return (
+    sentence = (
         f"{entity} {direction} {change} from "
         f"{_format_number(row['start_value'])} ({row['start_date'] or '...'}) to "
         f"{_format_number(row['latest_value'])} ({row['latest_date'] or '...'})."
     )
+    largest = row.get("largest_move")
+    if largest:
+        delta = _format_change(largest["delta"], largest["pct"])
+        sentence += (
+            f" Largest single-period move: {delta} between "
+            f"{largest['from_date'] or '...'} and {largest['to_date'] or '...'}."
+        )
+    return sentence
 
 
 def _bar_chart(entity: str, points: list[tuple[str, float]]) -> Drawing:
@@ -465,16 +601,26 @@ def _bar_chart(entity: str, points: list[tuple[str, float]]) -> Drawing:
     baseline = min(values)
     span = max(values) - baseline or 1.0
     plot_bottom = 34
-    plot_top = height - 24
+    plot_top = height - 26
     gap, bar_width = 18, 26
-    x = 18
-    series_max = max(values)
+    plot_left = 18
+    plot_right = plot_left + len(points) * (gap + bar_width) - gap
+
+    for i in range(1, 4):
+        value = baseline + span * i / 3
+        y = plot_bottom + (value - baseline) / span * (plot_top - plot_bottom)
+        drawing.add(Line(plot_left, y, plot_right, y, strokeColor=_GRID, strokeWidth=0.5))
+        label = String(plot_right + 4, y - 3, f"{value:g}", fontSize=7)
+        label.fillColor = _SLATE_MUTED
+        drawing.add(label)
+
+    x = plot_left
     for date_label, value in points:
         bar_height = (value - baseline) / span * (plot_top - plot_bottom)
         drawing.add(
             Rect(x, plot_bottom, bar_width, bar_height, fillColor=_AMBER, strokeColor=None)
         )
-        label = _shorten(date_label or entity, 8)
+        label = _shorten((date_label or entity)[:7] or entity, 9)
         text = String(x + bar_width / 2, plot_bottom - 12, label, fontSize=8)
         text.textAnchor = "middle"
         text.fillColor = _SLATE_MUTED
@@ -485,25 +631,25 @@ def _bar_chart(entity: str, points: list[tuple[str, float]]) -> Drawing:
         value_text.fillColor = _SLATE
         drawing.add(value_text)
         x += gap + bar_width
-    drawing.add(Line(12, plot_bottom, x + 6, plot_bottom, strokeColor=_BORDER, strokeWidth=0.6))
+    drawing.add(Line(plot_left, plot_bottom, plot_right, plot_bottom,
+                     strokeColor=_SLATE_MUTED, strokeWidth=0.8))
     return drawing
 
 
 # --- drafted narrative sections + references --------------------------------
 
 
-def _sections_block(sections: dict, styles) -> list:
-    story = []
-    for section in sections.values():
-        story.append(Paragraph(escape(section.get("title", "Section")), styles["Heading2"]))
-        for paragraph in str(section.get("body", "")).splitlines():
-            if paragraph.strip():
-                story.append(Paragraph(_inline_citations(paragraph), styles["BodyText"]))
-                story.append(Spacer(1, _SPACER))
-        citations = section.get("citations") or []
-        if citations:
-            story.append(Paragraph("Cited sources in this section:", styles["BodyText"]))
-            for citation in citations:
+def _section_flow(section: dict, styles, citations: bool = True) -> list:
+    flow: list = []
+    for paragraph in str(section.get("body", "")).splitlines():
+        if paragraph.strip():
+            flow.append(Paragraph(_inline_citations(paragraph), styles["BodyText"]))
+            flow.append(Spacer(1, _SPACER))
+    if citations:
+        cited = section.get("citations") or []
+        if cited:
+            flow.append(Paragraph("Cited sources in this section:", styles["BodyText"]))
+            for citation in cited:
                 document = escape(str(citation["document_name"]))
                 page = citation.get("page_number") or "n/a"
                 marker = (
@@ -511,25 +657,23 @@ def _sections_block(sections: dict, styles) -> list:
                     if citation.get("fact_id")
                     else ""
                 )
-                story.append(
+                flow.append(
                     Paragraph(f"• {document} — page {page}{marker}", styles["BodyText"])
                 )
-    return story
+    return flow
 
 
-def _references_block(sections: dict, styles) -> list:
-    story = [Spacer(1, 4 * mm), Paragraph("References / Sources", styles["Heading1"])]
+def _references_flow(sections: dict, styles) -> list:
+    flow: list = []
     references = _collect_references(sections)
     if references:
         for document_name, page in references:
-            story.append(
-                Paragraph(
-                    f"{escape(document_name)} — page {page}", styles["BodyText"]
-                )
+            flow.append(
+                Paragraph(f"{escape(document_name)} — page {page}", styles["BodyText"])
             )
     else:
-        story.append(Paragraph("No sources cited.", styles["BodyText"]))
-    return story
+        flow.append(Paragraph("No sources cited.", styles["BodyText"]))
+    return flow
 
 
 def _collect_references(sections: dict) -> list[tuple[str, int | None]]:
@@ -549,7 +693,7 @@ def _inline_citations(text: str) -> str:
     return escape(text)
 
 
-# --- numeric helpers --------------------------------------------------------
+# --- numeric / text helpers -------------------------------------------------
 
 
 def _to_float(value: Any) -> float | None:
@@ -578,3 +722,9 @@ def _format_change(change: float | None, pct: float | None) -> str:
     if pct is not None:
         base += f" ({sign}{pct:.1f}%)"
     return base
+
+
+def _shorten(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)] + "..."

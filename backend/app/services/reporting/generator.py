@@ -193,12 +193,20 @@ def pull_chunks(session: Session, filters: dict[str, Any]) -> list[dict[str, Any
 def _section_prompt(
     section: dict, template: dict, facts: list[dict], chunks: list[dict]
 ) -> str:
+    dated = [f["date_reference"] for f in facts if f.get("date_reference")]
+    coverage = (
+        f"{min(dated)} to {max(dated)}" if len(dated) > 1 else (dated[0] if dated else "not specified")
+    )
+    hints = template.get("entity_hints") or []
     parts = [
-        "You draft one section of an official report. Write it ONLY from the "
-        "facts and source chunks below; never invent numbers.",
+        "You are a senior analyst at CMPDI/CIL preparing an official report section. "
+        "Write formal, precise, analytical prose. Numbers are sacred: every figure you "
+        "publish must exist verbatim in the FACTS IN SCOPE below and must be cited by its id.",
         f"Template: {template['title']} ({template.get('description', '')})",
+        f"Target entities: {', '.join(hints) or 'any relevant'}.",
         f"Section: {section['title']}",
         f"Instructions: {section['prompt']}",
+        f"Data coverage: {coverage}.",
     ]
     if facts:
         parts.append(f"FACTS IN SCOPE ({len(facts)}):")
@@ -218,13 +226,38 @@ def _section_prompt(
                 f"[chunk={chunk['chunk_id']}] document={chunk['document_name']} "
                 f"page={chunk['page_number']}\n{chunk['text'][:500]}"
             )
+    parts.append("STYLE RULES:")
     parts.append(
-        "RULES: cite EVERY figure you mention by referencing its fact id from the "
+        "- Write flowing prose; do NOT open with a heading, bullet list, or inventory. "
+        "Bullets are only allowed when the instruction explicitly asks for a listing."
+    )
+    parts.append(
+        "- The moment you introduce a figure, cite it by referencing its fact id from "
+        "FACTS IN SCOPE. Never mention an uncited number."
+    )
+    parts.append(
+        "- Quantify movements only between two dated facts; give the absolute change and "
+        "the percentage when the starting value is non-zero. Otherwise use adjectives you "
+        "can defend from the cited data."
+    )
+    parts.append(
+        "- If the cited facts are insufficient for what the section asks, write explicitly "
+        "that the data does not support such a claim — never invent, extrapolate or guess."
+    )
+    parts.append(
+        "- Target under ~180 words unless the instruction asks for a data listing."
+    )
+    parts.append(
+        "- Assume the reader is CMPDI management; avoid hedging filler words like "
+        "'significantly' without evidence."
+    )
+    parts.append(
+        "RULES ON CITATIONS: cite EVERY figure by referencing its fact id from the "
         "FACTS IN SCOPE list. Do not reference ids that were not provided. "
         "If a figure cannot be cited, omit it."
     )
     parts.append(
-        'Respond ONLY with JSON: {"body": "<section prose>", '
+        'Respond ONLY with strict JSON, no markdown fences: {"body": "<section prose>", '
         '"citations": [{"fact_id": <int>, "document_name": "<name>", '
         '"page_number": <int>}, ...]}'
     )
