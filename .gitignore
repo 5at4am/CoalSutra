@@ -1,0 +1,24 @@
+# deps
+node_modules/
+.next/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tsconfig.tsbuildinfo
+
+# runtime / generated data
+backend/uploads/
+*.db
+*.sqlite
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# misc
+.DS_Store
+*.log
+.kilo
