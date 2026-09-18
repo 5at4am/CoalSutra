@@ -1,10 +1,11 @@
-"""Document ingestion endpoints (upload → background ingest).
+"""Document ingestion endpoints (upload → durable background job).
 
-Thin handlers: save the uploaded file, create the Document row, then hand the
-rest to `ingest_document` as a FastAPI BackgroundTask (swap point for a real
-queue later). The `source_type` written at upload time is provisional — the
-router re-classifies inside the orchestrator, which is where scanned vs digital
-PDFs are truly decided.
+Thin handlers: save the uploaded file, create the Document row, enqueue a
+persisted `IngestionJob`, and run it as a FastAPI BackgroundTask. The job row
+(not the task) is the source of truth: on restart, `resume_stale_jobs` re-queues
+whatever was left undone. The `source_type` written at upload time is
+provisional — the router re-classifies inside the orchestrator, which is where
+scanned vs digital PDFs are truly decided.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models import Document
 from app.schemas import DocumentRead, DocumentSummary
-from app.services.ingestion.orchestrator import ingest_document
+from app.services.ingestion.jobs import enqueue_ingestion, run_job
 from app.services.ingestion.router import classify_document
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,7 @@ async def upload_document(
     db.commit()
     db.refresh(document)
 
-    background_tasks.add_task(ingest_document, document.id)
-    logger.info("upload /api/v1/documents/upload: queued document %s", document.id)
+    job = enqueue_ingestion(db, document.id)
+    background_tasks.add_task(run_job, job.id)
+    logger.info("upload /api/v1/documents/upload: queued job %s for document %s", job.id, document.id)
     return document

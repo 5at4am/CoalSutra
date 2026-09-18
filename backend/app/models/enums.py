@@ -40,3 +40,12 @@ class ReportStatus(str, enum.Enum):
     draft = "draft"
     reviewed = "reviewed"
     final = "final"
+
+
+class JobStatus(str, enum.Enum):
+    """Lifecycle of a background ingestion job (survives restarts)."""
+
+    queued = "queued"
+    running = "running"
+    succeeded = "succeeded"
+    failed = "failed"

@@ -1,2 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: real-OCR / network-backed tests (default-skipped). Run with --run-slow",
+]
+addopts = "-m 'not slow'"

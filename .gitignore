@@ -13,6 +13,9 @@ backend/uploads/
 *.db
 *.sqlite
 
+# rasterized pages produced by OCR/eval runs over Test_docs scans
+Test_docs/*.p*.png
+
 # env & secrets
 .env
 .env.*

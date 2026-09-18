@@ -21,7 +21,7 @@ and anything flagged during cross-source validation is gated by a human-in-the-l
 | Layer            | Choice                                                        |
 |------------------|---------------------------------------------------------------|
 | Backend          | FastAPI (Python 3.12 spec; dev venv runs Python 3.14) + uvicorn |
-| ORM / migrations | SQLAlchemy 2.x + Alembic (5 revisions)                         |
+| ORM / migrations | SQLAlchemy 2.x + Alembic (6 revisions)                         |
 | Postgres         | `pgvector/pgvector:pg16` (PG16 + `vector` extension, migration 0001) |
 | Frontend         | Next.js 14 App Router, TypeScript, Tailwind CSS                |
 | PDF export       | reportlab 4.2.2 (native vector charts, no extra deps)          |
@@ -102,9 +102,9 @@ UI `frontend/app/review/page.tsx`):
   `{uuid4().hex}{suffix}` name. Original filename kept on the `Document` row.
 - Provenance: each fact carries `document_id` + `page_number` + `raw_snippet`; the
   `Document.raw_file_path` column is the storage handle the whole pipeline reads.
-- Ingestion runs as a FastAPI `BackgroundTask` → `ingest_document(document.id)`.
-  *(Prototype note: in-process task, not a queue — a restart mid-ingest leaves a doc
-  `pending`.)*
+- Ingestion now runs through a **durable `IngestionJob`** (retry with exponential backoff up to
+  3 attempts; `resume_stale_jobs()` on app restart re-queues anything left mid-flight), so uploads
+  survive backend restarts instead of hanging forever.
 - Report PDFs export to `{UPLOAD_DIR}/reports/report_{id}.pdf` (`exporter.py`).
 
 ---
@@ -218,9 +218,19 @@ Design system:
    rules, trend quantification), and a restructured PDF (cover page, page-numbered
    table of contents, numbered sections, keep-together headings, gridlined charts,
    biggest single-period move highlight).
-10. **Tests** — `pytest` green: **88 passing** (hermetic: forced no-LLM + hash
-   embeddings), covering pipelines, API lifecycle, review, topics, RAG, metrics,
-   normalizer, modelling, uploads.
+10. **Durable ingestion jobs** — `models/job.py` + `services/ingestion/jobs.py`:
+    persisted jobs, retry with backoff, `drain_queue`, `resume_stale_jobs` on startup
+    (uploads survive restarts); alembic `0006_add_ingestion_jobs`.
+11. **Facts-check lint** — `services/reporting/lint.py` + `GET /reports/{id}/lint` +
+    `scripts/lint_reports.py`: flags unverifiable/uncited figures as errors, benign
+    percentages/dates as info.
+12. **Golden RAG eval** — `services/rag/eval.py` + `scripts/eval_rag.py` (7 value cases +
+    1 refusal control; `--offline` CI-safe; Groq 429 retry; `os._exit(0)` vs RapidOCR hang).
+13. **Real image OCR test** — `tests/test_ocr_image.py` runs actual RapidOCR on a
+    PIL-generated image-only document (marked `slow`; excluded by default via pyproject).
+14. **Tests** — `pytest` green: **109 passing** (hermetic: forced no-LLM + hash embeddings,
+    `-m "not slow"` default) covering pipelines, API lifecycle, review, topics, RAG, RAG eval,
+    report lint, ingestion jobs, metrics, normalizer, modelling, uploads.
 
 ---
 
@@ -254,7 +264,11 @@ Config: `.env.example` → `.env`. Key vars — `DATABASE_URL`, `LLM_API_KEY`,
   **RapidOCR**, which works fully offline; HF stays the plug-in for deployed envs.
 - **Groq embeddings**: no endpoint → local `hash` embeddings fallback keeps everything
   runnable; pgvector is wired and ready behind a real Postgres (`docker compose up`).
-- **In-process ingestion** — `BackgroundTask`, not a queue (prototype depth).
+  Honest eval finding: with hash vectors the non-answerable RAG control still retrieves junk
+  chunks — reported rather than hidden.
+- **Durable but in-process queue** — `ingestion_jobs` makes uploads restart-safe; not a
+  distributed queue.
+- **No auth yet** — `resolved_by` is free-text (passcode session on roadmap).
 - **Groq zero-shot nondeterminism** — mitigated by rule-fallback + snippet repair; a
   deterministic eval is the gate, not single-shot LLM output.
 - **Next.js build flakiness on Windows** — intermittent incomplete `.next` (missing

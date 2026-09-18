@@ -19,6 +19,7 @@ from app.models.enums import ReportStatus
 from app.schemas import ReportGenerate, ReportRead
 from app.services.reporting.exporter import export_report
 from app.services.reporting.generator import generate_report
+from app.services.reporting.lint import lint_sections
 from app.services.reporting.templates import get_template, list_templates as _list_templates
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,19 @@ def get_report(report_id: int, db: Session = Depends(get_db)) -> Report:
     if report is None:
         raise HTTPException(status_code=404, detail="report not found")
     return report
+
+
+@router.get("/{report_id}/lint")
+def lint_report(report_id: int, db: Session = Depends(get_db)) -> dict:
+    """Facts-check lint: every figure in drafted sections must be backed and cited."""
+    report = db.get(Report, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="report not found")
+    content = report.content or {}
+    return lint_sections(
+        content.get("sections") or {},
+        content.get("facts") or [],
+    )
 
 
 @router.post("/{report_id}/approve", response_model=ReportRead)

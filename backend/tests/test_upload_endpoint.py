@@ -12,6 +12,7 @@ from app.main import app
 from app.models import Document
 from app.models.enums import DocumentStatus
 from app.services.ingestion import orchestrator as ing
+from app.services.ingestion import jobs as jobsvc
 
 
 @pytest.fixture()
@@ -35,6 +36,7 @@ def client(tmp_path, monkeypatch):
 
     app.dependency_overrides[get_db] = override_get_db
     ing.SessionLocal = factory
+    jobsvc.SessionLocal = factory
 
     with TestClient(app) as test_client:
         yield test_client, factory
