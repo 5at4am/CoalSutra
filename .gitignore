@@ -13,6 +13,10 @@ backend/uploads/
 *.db
 *.sqlite
 
+# render output (brag + explainer videos, large binaries — never commit)
+brag-output/
+explainer-output/
+
 # rasterized pages produced by OCR/eval runs over Test_docs scans
 Test_docs/*.p*.png
 

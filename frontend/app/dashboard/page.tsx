@@ -1,7 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import { apiGet } from "@/lib/api";
+import Icon from "@/components/Icon";
+import PageHeader, { SectionHeader } from "@/components/PageHeader";
+import KpiCard from "@/components/KpiCard";
+import AlertBanner from "@/components/AlertBanner";
+import { btnSecondary, cardBase } from "@/lib/ui";
+import imgTopics from "@/app/public/img-3F.png";
 
 type Metrics = {
   documents_total: number;
@@ -26,12 +33,12 @@ type TopicRun = {
 };
 
 const CLOUD_PALETTE = [
-  "text-coal-950 dark:text-slate-100 dark:text-slate-100",
-  "text-coal-700 dark:text-slate-300",
+  "text-ink dark:text-slate-100",
   "text-source dark:text-emerald-400",
-  "text-coal-500 dark:text-slate-400 dark:text-slate-400",
+  "text-gap dark:text-amber-300",
+  "text-info dark:text-sky-400",
+  "text-coal-800 dark:text-slate-300",
   "text-source-dark dark:text-emerald-500",
-  "text-coal-800 dark:text-slate-200",
 ];
 
 function formatMs(ms: number | null): string {
@@ -40,60 +47,43 @@ function formatMs(ms: number | null): string {
   return `${Math.round(ms)} ms`;
 }
 
-function MetricCard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-coal-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-coal-400 dark:text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-3xl font-semibold tabular-nums text-coal-950 dark:text-slate-100">
-        {value}
-      </p>
-      <p className="mt-1 text-sm text-coal-400 dark:text-slate-500">{sub}</p>
-    </div>
-  );
-}
-
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [topicRun, setTopicRun] = useState<TopicRun | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [m, t] = await Promise.allSettled([
-          apiGet<Metrics>("/api/v1/metrics/summary"),
-          apiGet<TopicRun>("/api/v1/topics/latest"),
-        ]);
-        if (m.status === "fulfilled") setMetrics(m.value);
-        if (t.status === "fulfilled") setTopicRun(t.value);
-        const failed = [m, t].filter(
-          (r): r is PromiseRejectedResult => r.status === "rejected"
-        );
-        if (failed.length) {
-          const messages = failed.map((r) =>
-            r.reason instanceof Error ? r.reason.message : "Request failed."
-          );
-          setError(messages.join(" · "));
-        }
-      } catch {
-        setError("Failed to load dashboard data.");
-      }
-    };
-    void load();
+  const load = useCallback(async () => {
+    try {
+      const [m, t] = await Promise.allSettled([
+        apiGet<Metrics>("/api/v1/metrics/summary"),
+        apiGet<TopicRun>("/api/v1/topics/latest"),
+      ]);
+      if (m.status === "fulfilled") setMetrics(m.value);
+      if (t.status === "fulfilled") setTopicRun(t.value);
+      const failed = [m, t].filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected"
+      );
+      setError(
+        failed.length
+          ? failed
+              .map((r) =>
+                r.reason instanceof Error ? r.reason.message : "Request failed."
+              )
+              .join(" · ")
+          : null
+      );
+    } catch {
+      setError("Failed to load dashboard data.");
+    }
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const topics = topicRun?.topics ?? [];
   const maxDoc = Math.max(1, ...topics.map((t) => t.doc_count));
+  const topicCount = topicRun?.topics?.length ?? 0;
 
   const cloudWords: { word: string; weight: number }[] = [];
   const seen = new Map<string, number>();
@@ -114,133 +104,212 @@ export default function DashboardPage() {
     return 16 + Math.round(t * 26);
   };
 
+  const topicGlossary = new Set<string>();
+  for (const topic of topics) for (const kw of topic.top_keywords) topicGlossary.add(kw);
+
   return (
-    <>
-      <main className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6">
-        <header>
-          <h1 className="text-xl font-semibold text-coal-950 dark:text-slate-100">Dashboard</h1>
-          <p className="mt-1 text-sm text-coal-500 dark:text-slate-400">
-            Pipeline health and topic landscape across the ingested corpus.
+    <main className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
+      <PageHeader
+        title="Dashboard"
+        purpose="Pipeline health and topic landscape across the ingested corpus."
+        actions={
+          <button onClick={() => void load()} className={`${btnSecondary} px-3 py-2`}>
+            <Icon name="refresh" size={15} />
+            Refresh
+          </button>
+        }
+      />
+
+      {error && (
+        <div className="mt-4">
+          <AlertBanner tone="error">{error}</AlertBanner>
+        </div>
+      )}
+
+      {/* ---------- metrics row ---------- */}
+      {metrics ? (
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            label="Documents processed"
+            value={String(metrics.documents_processed)}
+            sub={`${metrics.documents_total} total ingested`}
+            icon={<Icon name="file" size={16} />}
+          />
+          <KpiCard
+            label="Avg. query time"
+            value={formatMs(metrics.avg_query_ms)}
+            sub={
+              metrics.queries_served > 0
+                ? `across ${metrics.queries_served} questions`
+                : "ask a question in Chat to populate"
+            }
+            icon={<Icon name="clock" size={16} />}
+            tone={metrics.avg_query_ms !== null && metrics.avg_query_ms > 3000 ? "warning" : "info"}
+          />
+          <KpiCard
+            label="Open conflicts"
+            value={String(metrics.open_conflicts)}
+            sub="awaiting human review"
+            tone={metrics.open_conflicts > 0 ? "warning" : "success"}
+            icon={<Icon name="review" size={16} />}
+          />
+          <KpiCard
+            label="Docs needing review"
+            value={`${metrics.flagged_documents_pct}%`}
+            sub="of processed documents"
+            icon={<Icon name="shield" size={16} />}
+          />
+        </div>
+      ) : (
+        !error && (
+          <div className="mt-6 flex items-center justify-center gap-2 rounded-2xl border border-coal-200 bg-white p-10 text-sm text-ink-muted shadow-card dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+            <Icon name="refresh" size={14} className="animate-spin" />
+            Loading metrics…
+          </div>
+        )
+      )}
+
+      {/* ---------- topic intelligence explainer ---------- */}
+      <section className={`${cardBase} mt-6 flex flex-col gap-6 p-5 lg:flex-row lg:items-center lg:gap-8`}>
+        <Image
+          src={imgTopics}
+          alt="Topic intelligence illustration: a word cloud of frequent terms, topic clusters grouping related documents, and filters by document, year, block or source."
+          className="w-full rounded-xl border border-coal-200 bg-canvas lg:w-3/5 dark:border-slate-700 dark:bg-slate-800"
+          sizes="(min-width: 1024px) 55vw, 100vw"
+        />
+        <div className="lg:flex-1">
+          <SectionHeader title="Topics & word cloud" icon="spark" />
+          <p className="mt-2 text-sm leading-relaxed text-ink-muted dark:text-slate-400">
+            The topic view turns the corpus into navigable clusters instead of
+            forcing you to read every file.
           </p>
-        </header>
+          <ul className="mt-3 grid gap-2">
+            {[
+              "The word cloud weights terms by how many documents they anchor.",
+              "Topics group documents into related themes — reserves, production, quality, blocks.",
+              "Every keyword stays traceable to the documents it came from.",
+            ].map((point) => (
+              <li
+                key={point}
+                className="flex items-start gap-2.5 text-sm leading-relaxed text-ink-muted dark:text-slate-300"
+              >
+                <Icon name="check" size={14} className="mt-0.5 shrink-0 text-source dark:text-emerald-400" />
+                {point}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
 
-        {error && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-            {error}
-          </div>
-        )}
-
-        {/* metrics row */}
-        {metrics ? (
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard
-              label="Documents processed"
-              value={String(metrics.documents_processed)}
-              sub={`${metrics.documents_total} total ingested`}
-            />
-            <MetricCard
-              label="Avg. query time"
-              value={formatMs(metrics.avg_query_ms)}
-              sub={
-                metrics.queries_served > 0
-                  ? `across ${metrics.queries_served} questions`
-                  : "ask a question in Chat to populate"
-              }
-            />
-            <MetricCard
-              label="Open conflicts"
-              value={String(metrics.open_conflicts)}
-              sub="awaiting human review"
-            />
-            <MetricCard
-              label="Docs needing review"
-              value={`${metrics.flagged_documents_pct}%`}
-              sub="of processed documents"
-            />
-          </div>
-        ) : (
-          !error && (
-            <div className="mt-6 rounded-2xl border border-coal-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center text-sm text-coal-400 dark:text-slate-500 shadow-card">
-              Loading metrics…
-            </div>
-          )
-        )}
-
-        {/* word cloud */}
-        <section className="mt-6 rounded-2xl border border-coal-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-card">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-coal-500 dark:text-slate-400">
-              Word cloud
-            </h2>
-            {topicRun && (
-              <span className="text-xs text-coal-400 dark:text-slate-500">
-                from run #{topicRun.id} · {topics.length} topics
-              </span>
-            )}
-          </div>
-          {cloudWords.length === 0 ? (
-            <p className="mt-6 text-center text-sm text-coal-400 dark:text-slate-500">
+      {/* ---------- word cloud ---------- */}
+      <section className={`${cardBase} mt-6 p-6`}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <SectionHeader title="Word cloud" icon="spark" />
+          {topicRun && (
+            <span className="text-xs tabular-nums text-ink-muted dark:text-slate-500">
+              from run #{topicRun.id} · {topicCount} topic{topicCount === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+        {cloudWords.length === 0 ? (
+          <div className="mt-8 flex flex-col items-center py-8 text-center">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-coal-100 text-coal-500 dark:bg-slate-800 dark:text-slate-400">
+              <Icon name="spark" size={18} />
+            </span>
+            <p className="mt-3 text-sm text-ink-muted dark:text-slate-400">
               No topic run yet — ingest documents and run a topic analysis to
               surface keyword clusters here.
             </p>
-          ) : (
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 py-6">
+          </div>
+        ) : (
+          <>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-y border-coal-100 py-8 dark:border-slate-800">
               {cloudWords.map((item, i) => (
                 <span
                   key={`${item.word}-${i}`}
-                  className={`font-medium leading-none ${CLOUD_PALETTE[i % CLOUD_PALETTE.length]}`}
+                  className={`font-semibold leading-none ${CLOUD_PALETTE[i % CLOUD_PALETTE.length]}`}
                   style={{ fontSize: `${cloudScale(item.weight)}px` }}
+                  title={`appears in ${item.weight} document${item.weight === 1 ? "" : "s"}`}
                 >
                   {item.word}
                 </span>
               ))}
             </div>
-          )}
-        </section>
-
-        {/* topic bars */}
-        <section className="mt-6 rounded-2xl border border-coal-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-card">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-coal-500 dark:text-slate-400">
-            Topics
-          </h2>
-          {topics.length === 0 ? (
-            <p className="mt-6 text-center text-sm text-coal-400 dark:text-slate-500">
-              No topics available yet.
+            <p className="mt-3 text-xs text-ink-muted dark:text-slate-500">
+              Font size reflects how many documents a keyword anchors; one word
+              per topic (its top keyword).
             </p>
-          ) : (
-            <ul className="mt-5 flex flex-col gap-5">
-              {topics.map((topic, i) => (
-                <li key={`${topic.label}-${i}`}>
-                  <div className="mb-1.5 flex items-baseline justify-between gap-4">
-                    <p className="text-sm font-medium text-coal-900 dark:text-slate-100">
-                      {topic.label}
-                    </p>
-                    <span className="text-xs tabular-nums text-coal-400 dark:text-slate-500">
-                      {topic.doc_count} document{topic.doc_count === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-coal-100 dark:bg-slate-800">
-                    <div
-                      className="h-full rounded-full bg-source"
-                      style={{ width: `${(topic.doc_count / maxDoc) * 100}%` }}
+          </>
+        )}
+      </section>
+
+      {/* ---------- topic bars ---------- */}
+      <section className={`${cardBase} mt-6 p-6`}>
+        <SectionHeader
+          title="Topics"
+          icon="chart"
+          meta={
+            topicCount > 0 ? (
+              <span className="text-xs tabular-nums text-ink-muted dark:text-slate-500">
+                {topicGlossary.size} unique keywords across topics
+              </span>
+            ) : undefined
+          }
+        />
+        {topics.length === 0 ? (
+          <div className="mt-8 flex flex-col items-center py-8 text-center">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-coal-100 text-coal-500 dark:bg-slate-800 dark:text-slate-400">
+              <Icon name="chart" size={18} />
+            </span>
+            <p className="mt-3 text-sm text-ink-muted dark:text-slate-400">
+              No topics available yet — run a topic analysis on the corpus to
+              populate this view.
+            </p>
+          </div>
+        ) : (
+          <ul className="mt-5 flex flex-col gap-5">
+            {topics.map((topic, i) => (
+              <li key={`${topic.label}-${i}`}>
+                <div className="mb-1.5 flex items-baseline justify-between gap-4">
+                  <p className="flex items-center gap-2 text-sm font-medium text-ink dark:text-slate-100">
+                    <span
+                      aria-hidden="true"
+                      className={`h-2 w-2 shrink-0 rounded-full ${i % 2 === 0 ? "bg-source" : "bg-info"}`}
                     />
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {topic.top_keywords.map((keyword, j) => (
-                      <span
-                        key={j}
-                        className="rounded-md bg-coal-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium text-coal-600 dark:text-slate-300"
-                      >
-                        {keyword}
-                      </span>
-                    ))}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </main>
-    </>
+                    Topic {i + 1}: {topic.label}
+                  </p>
+                  <span className="text-xs tabular-nums text-ink-muted dark:text-slate-500">
+                    {topic.doc_count} document{topic.doc_count === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div
+                  className="h-2.5 w-full overflow-hidden rounded-full bg-coal-100 dark:bg-slate-800"
+                  role="progressbar"
+                  aria-valuenow={(topic.doc_count / maxDoc) * 100}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${topic.label} share of documents`}
+                >
+                  <div
+                    className={`h-full rounded-full ${i % 2 === 0 ? "bg-source" : "bg-info"}`}
+                    style={{ width: `${(topic.doc_count / maxDoc) * 100}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {topic.top_keywords.map((keyword, j) => (
+                    <span
+                      key={j}
+                      className="rounded-md bg-coal-100 px-2 py-0.5 text-xs font-medium text-ink-muted dark:bg-slate-800 dark:text-slate-300"
+                    >
+                      {keyword}
+                    </span>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </main>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Icon from "@/components/Icon";
 import type { EvidenceCitation } from "./SourceChip";
 
 type SourceEvidencePanelProps = {
@@ -21,6 +22,14 @@ export default function SourceEvidencePanel({
     return () => window.removeEventListener("keydown", onKey);
   }, [citation, onClose]);
 
+  useEffect(() => {
+    if (!citation) return;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [citation]);
+
   if (!citation) return null;
 
   return (
@@ -29,15 +38,21 @@ export default function SourceEvidencePanel({
         type="button"
         aria-label="Close sources panel"
         onClick={onClose}
-        className="absolute inset-0 bg-coal-950/40 backdrop-blur-[2px]"
+        className="absolute inset-0 cursor-default bg-slate-950/40 backdrop-blur-[2px]"
       />
-      <aside className="relative z-10 flex h-full w-full max-w-md animate-slide-in-right flex-col border-l border-coal-300 bg-white shadow-drawer dark:border-slate-700 dark:bg-slate-900">
-        <header className="flex items-center justify-between border-b border-coal-200 px-5 py-4 dark:border-slate-800">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-source">
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Source evidence — ${citation.document_name}`}
+        className="relative z-10 flex h-full w-full max-w-md animate-slide-in-right flex-col border-l border-coal-200 bg-white shadow-panel dark:border-slate-700 dark:bg-slate-900"
+      >
+        <header className="flex items-start justify-between gap-3 border-b border-coal-200 px-5 py-4 dark:border-slate-800">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-source dark:text-emerald-300">
+              <Icon name="source" size={13} />
               Source evidence
             </p>
-            <h3 className="mt-0.5 text-sm font-semibold text-coal-950 dark:text-slate-100">
+            <h3 className="mt-1 break-words text-sm font-semibold text-ink dark:text-slate-100">
               {citation.document_name}
             </h3>
           </div>
@@ -45,20 +60,21 @@ export default function SourceEvidencePanel({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md px-2 py-1 text-base text-coal-400 transition-colors hover:bg-coal-100 hover:text-coal-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-coal-100 hover:text-ink dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
           >
-            ✕
+            <Icon name="close" size={16} />
           </button>
         </header>
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <span className="inline-block rounded-md bg-source-light px-2 py-1 text-xs font-medium text-source-dark dark:bg-source/15 dark:text-emerald-300">
+          <span className="inline-flex items-center gap-1 rounded-md bg-source-light px-2 py-1 text-xs font-medium text-source-dark dark:bg-source/15 dark:text-emerald-300">
+            <Icon name="file" size={12} />
             Page {citation.page_number}
           </span>
-          <p className="mt-4 text-[15px] leading-relaxed text-coal-800 dark:text-slate-200">
+          <blockquote className="mt-4 border-l-2 border-source/40 pl-4 text-[15px] leading-relaxed text-ink dark:text-slate-200">
             &ldquo;{citation.snippet}&rdquo;
-          </p>
+          </blockquote>
         </div>
-        <footer className="border-t border-coal-200 px-5 py-3 text-xs text-coal-400 dark:border-slate-800 dark:text-slate-500">
+        <footer className="border-t border-coal-200 px-5 py-3 text-xs text-ink-muted dark:border-slate-800 dark:text-slate-500">
           Page-level traceability to the original scanned document.
         </footer>
       </aside>

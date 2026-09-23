@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import SourceChip, {
   type EvidenceCitation,
 } from "@/components/SourceChip";
 import SourceEvidencePanel from "@/components/SourceEvidencePanel";
+import Icon from "@/components/Icon";
+import AlertBanner from "@/components/AlertBanner";
+import imgProvenance from "@/app/public/img-3C.png";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const QUERY_ENDPOINT = `${API_BASE}/api/v1/query`;
@@ -16,6 +20,12 @@ type Message = {
 };
 
 const EMPTY_STATE: EvidenceCitation[] = [];
+
+const SUGGESTIONS = [
+  "What is the coal reserve of Jharia as of 2019?",
+  "What was coal production in 2026?",
+  "Report ash and moisture for Bokaro in 2021.",
+];
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -80,7 +90,7 @@ export default function ChatPage() {
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
       e.preventDefault();
-      send();
+      void send();
     }
   }
 
@@ -88,40 +98,41 @@ export default function ChatPage() {
 
   return (
     <>
-      <main className="mx-auto flex max-w-chat flex-col px-4 pb-6 pt-6 sm:px-6">
+      <main className="mx-auto flex max-w-chat flex-col px-4 pb-6 pt-8 sm:px-6">
         {showEmptyState ? (
-          <div className="flex flex-1 flex-col items-center justify-center py-24 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-coal-900 text-sm font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
-              Q
-            </div>
-            <h2 className="text-xl font-semibold text-coal-950 dark:text-slate-100">
+          <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-faint text-accent dark:bg-accent/15 dark:text-amber-300">
+              <Icon name="chat" size={22} />
+            </span>
+            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-ink dark:text-slate-100">
               Ask the corpus
-            </h2>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-coal-500 dark:text-slate-400">
+            </h1>
+            <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-muted dark:text-slate-400">
               Questions are answered only from extracted, validated facts. Every
               answer lists its source documents and pages.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {[
-                "What is the coal reserve of Jharia as of 2019?",
-                "What was coal production in 2026?",
-                "Report ash and moisture for Bokaro in 2021.",
-              ].map((suggestion) => (
+              {SUGGESTIONS.map((suggestion) => (
                 <button
                   key={suggestion}
                   onClick={() => {
                     setInput(suggestion);
                     textareaRef.current?.focus();
                   }}
-                  className="rounded-lg border border-coal-200 bg-white px-3 py-1.5 text-sm text-coal-600 shadow-card transition-colors hover:border-coal-300 hover:text-coal-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-white"
+                  className="rounded-lg border border-coal-200 bg-white px-3 py-1.5 text-sm text-ink-muted shadow-card transition-colors hover:border-accent-ring hover:text-accent dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:text-white"
                 >
                   {suggestion}
                 </button>
               ))}
             </div>
+            <Image
+              src={imgProvenance}
+              alt="Provenance illustration: every answer traces to its source document, page and exact snippet."
+              className="mt-8 h-auto w-full max-w-xl rounded-2xl border border-coal-200 bg-white shadow-card dark:border-slate-700 dark:bg-slate-800"
+            />
           </div>
         ) : (
-          <div className="flex h-[calc(100dvh-8.5rem)] flex-col gap-4 overflow-y-auto pb-4">
+          <div className="flex h-[calc(100dvh-9rem)] flex-col gap-4 overflow-y-auto pb-4">
             {messages.map((msg, index) => (
               <div
                 key={index}
@@ -130,16 +141,17 @@ export default function ChatPage() {
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-3 text-[15px] leading-relaxed shadow-card animate-fade-in ${
                     msg.role === "user"
-                      ? "rounded-br-md bg-coal-900 text-white dark:bg-slate-200 dark:text-slate-900"
-                      : "rounded-bl-md border border-coal-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-coal-900 dark:text-slate-100"
+                      ? "rounded-br-md bg-ink text-white dark:bg-slate-100 dark:text-slate-900"
+                      : "rounded-bl-md border border-coal-200 bg-white text-ink dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{msg.text}</p>
                   {msg.role === "assistant" && (
-                    <div className="mt-3 border-t border-coal-100 dark:border-slate-800 pt-3">
+                    <div className="mt-3 border-t border-coal-100 pt-3 dark:border-slate-800">
                       {msg.citations.length === 0 ? (
                         <div className="rounded-lg bg-gap-light px-3 py-2 text-sm text-gap dark:bg-gap/15 dark:text-amber-300">
-                          <p className="font-medium">
+                          <p className="flex items-center gap-1.5 font-medium">
+                            <Icon name="alert" size={14} />
                             I couldn&rsquo;t find supporting documents for this
                             question.
                           </p>
@@ -150,7 +162,7 @@ export default function ChatPage() {
                         </div>
                       ) : (
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-medium uppercase tracking-wide text-coal-400 dark:text-slate-500">
+                          <span className="text-xs font-medium uppercase tracking-wide text-ink-muted dark:text-slate-500">
                             Sources
                           </span>
                           {msg.citations.map((citation, i) => (
@@ -169,7 +181,8 @@ export default function ChatPage() {
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="rounded-2xl rounded-bl-md border border-coal-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-coal-500 dark:text-slate-400 shadow-card animate-fade-in">
+                <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-coal-200 bg-white px-4 py-3 text-sm text-ink-muted shadow-card animate-fade-in dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                  <Icon name="refresh" size={14} className="animate-spin text-accent" />
                   Searching facts and drafting an answer…
                 </div>
               </div>
@@ -179,13 +192,13 @@ export default function ChatPage() {
         )}
 
         {error && (
-          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-            {error}
+          <div className="mb-3">
+            <AlertBanner tone="error">{error}</AlertBanner>
           </div>
         )}
 
-        <div className="sticky bottom-0 border-t border-coal-200 bg-coal-50/90 pt-3 backdrop-blur dark:border-slate-700 dark:bg-slate-950/90">
-          <div className="flex items-end gap-2 rounded-xl border border-coal-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 shadow-card focus-within:border-coal-500">
+        <div className="sticky bottom-0 border-t border-coal-200 bg-canvas pt-3 dark:border-slate-800 dark:bg-canvas-dark">
+          <div className="flex items-end gap-2 rounded-xl border border-coal-300 bg-white p-2 shadow-card transition-colors focus-within:border-accent-ring dark:border-slate-700 dark:bg-slate-900 dark:focus-within:border-slate-500">
             <textarea
               ref={textareaRef}
               value={input}
@@ -193,17 +206,22 @@ export default function ChatPage() {
               onKeyDown={onKeyDown}
               rows={1}
               placeholder="Ask about reserves, production, quality…"
-              className="max-h-40 flex-1 resize-none bg-transparent px-2 py-2 text-[15px] text-coal-900 outline-none placeholder:text-coal-400 dark:text-slate-100 dark:placeholder:text-slate-500"
+              className="max-h-40 flex-1 resize-none bg-transparent px-2 py-2 text-[15px] text-ink outline-none placeholder:text-ink-muted/70 dark:text-slate-100 dark:placeholder:text-slate-500"
             />
             <button
               onClick={() => void send()}
               disabled={loading || !input.trim()}
-              className="rounded-lg bg-coal-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-coal-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+              aria-label="Send message"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {loading ? "…" : "Send"}
+              {loading ? (
+                <Icon name="refresh" size={16} className="animate-spin" />
+              ) : (
+                <Icon name="send" size={16} />
+              )}
             </button>
           </div>
-          <p className="mt-2 text-center text-xs text-coal-400 dark:text-slate-500">
+          <p className="mt-2 text-center text-xs text-ink-muted dark:text-slate-500">
             Enter or Ctrl/⌘ + Enter to send · Shift + Enter for a new line.
           </p>
         </div>

@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet, apiUpload } from "@/lib/api";
+import Icon from "@/components/Icon";
+import PageHeader, { SectionHeader } from "@/components/PageHeader";
+import StatusBadge from "@/components/StatusBadge";
+import AlertBanner from "@/components/AlertBanner";
+import EmptyState from "@/components/EmptyState";
+import { btnSecondary } from "@/lib/ui";
 
 type DocStatus = "pending" | "processing" | "processed" | "failed";
 
@@ -16,20 +22,20 @@ type DocumentItem = {
 
 const ACCEPT = ".pdf,.csv,.xlsx,.xls,.ods,.png,.jpg,.jpeg,.tif,.tiff";
 
-const STATUS_BADGE: Record<DocStatus, string> = {
-  pending: "bg-coal-100 dark:bg-slate-800 text-coal-700 dark:text-slate-300 dark:bg-slate-800 dark:text-slate-300",
-  processing:
-    "bg-gap-light text-gap dark:bg-gap/15 dark:text-amber-300",
-  processed:
-    "bg-source-light text-source-dark dark:bg-source/20 dark:text-emerald-300",
-  failed: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400",
-};
+const FORMATS = ["PDF", "CSV", "XLSX", "XLS", "ODS", "PNG", "JPG", "TIFF"];
 
 const STATUS_LABEL: Record<DocStatus, string> = {
   pending: "pending",
-  processing: "processing…",
+  processing: "processing",
   processed: "processed",
   failed: "failed",
+};
+
+const STATUS_TONE: Record<DocStatus, "neutral" | "warning" | "success" | "danger"> = {
+  pending: "neutral",
+  processing: "warning",
+  processed: "success",
+  failed: "danger",
 };
 
 function formatDate(iso: string): string {
@@ -110,145 +116,213 @@ export default function IngestPage() {
   const failed = (docs ?? []).filter((d) => d.status === "failed").length;
 
   return (
-    <>
-      <main className="mx-auto max-w-5xl px-4 pb-16 pt-6 sm:px-6">
-        <header className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold text-coal-950 dark:text-slate-100">Ingest</h1>
-            <p className="mt-1 text-sm text-coal-500 dark:text-slate-400">
-              Upload CIL/CMPDI documents — scanned or born-digital PDFs, images,
-              spreadsheets — and the pipeline extracts cited facts from them.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-coal-400 dark:text-slate-500">
-              {docs ? `${processed} processed` : ""}
-              {failed > 0 ? ` · ${failed} failed` : ""}
-            </span>
-            <button
-              onClick={() => void loadDocs()}
-              className="rounded-lg border border-coal-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm font-medium text-coal-600 dark:text-slate-300 transition-colors hover:border-coal-400 dark:hover:border-slate-600 hover:text-coal-900 dark:hover:text-white"
-            >
+    <main className="mx-auto max-w-5xl px-4 pb-16 pt-8 sm:px-6">
+      <PageHeader
+        title="Ingest"
+        purpose="Upload CIL/CMPDI documents — scanned or born-digital PDFs, images,
+            spreadsheets — and the pipeline extracts cited facts from them."
+        actions={
+          <>
+            <button onClick={() => void loadDocs()} className={`${btnSecondary} px-3 py-2`}>
+              <Icon name="refresh" size={15} />
               Refresh
             </button>
-          </div>
-        </header>
+          </>
+        }
+        context={
+          docs && (
+            <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-muted dark:text-slate-500">
+              <StatusBadge label={`${processed} processed`} tone="success" dot />
+              {failed > 0 && <StatusBadge label={`${failed} failed`} tone="danger" dot />}
+              <StatusBadge
+                label={`${(docs ?? []).filter((d) => d.status === "processing" || d.status === "pending").length} in queue`}
+                tone="neutral"
+                dot
+              />
+            </p>
+          )
+        }
+      />
 
-        {/* dropzone */}
-        <div
-          onDragOver={(e) => {
+      {/* ---------- dropzone ---------- */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Upload documents"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            setDragOver(true);
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        onClick={() => inputRef.current?.click()}
+        className={`mt-5 cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ring sm:p-12 ${
+          dragOver
+            ? "border-accent-ring bg-accent-faint dark:border-amber-500 dark:bg-accent/10"
+            : "border-coal-300 bg-white hover:border-coal-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500"
+        }`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept={ACCEPT}
+          className="sr-only"
+          onChange={(e) => {
+            if (e.target.files?.length) {
+              void uploadFiles(Array.from(e.target.files));
+              e.target.value = "";
+            }
           }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={onDrop}
-          onClick={() => inputRef.current?.click()}
-          className={`mt-5 cursor-pointer rounded-2xl border-2 border-dashed p-12 text-center transition-colors ${
+        />
+        <span
+          className={`mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${
             dragOver
-              ? "border-coal-500 bg-coal-50 dark:bg-slate-800"
-              : "border-coal-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-coal-400 dark:hover:border-slate-600"
+              ? "bg-accent text-white dark:text-amber-300"
+              : "bg-coal-100 text-coal-500 dark:bg-slate-800 dark:text-slate-400"
           }`}
         >
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            accept={ACCEPT}
-            hidden
-            onChange={(e) => {
-              if (e.target.files?.length) {
-                void uploadFiles(Array.from(e.target.files));
-                e.target.value = "";
-              }
-            }}
-          />
-          <div className="text-3xl font-semibold text-coal-300 dark:text-slate-600">+</div>
-          <p className="mt-2 text-sm font-medium text-coal-800 dark:text-slate-200">
-            Drop documents here or click to browse
-          </p>
-          <p className="mt-1 text-xs text-coal-400 dark:text-slate-500">
-            PDF · CSV · XLSX · XLS · ODS · PNG · JPG · TIFF — multiple files allowed
-          </p>
-          <p className="mt-3 text-xs leading-relaxed text-coal-400 dark:text-slate-500">
-            Scanned PDFs/images need the OCR binary installed; born-digital PDFs and
-            spreadsheets extract without it.
-          </p>
+          <Icon name="upload" size={22} />
+        </span>
+        <p className="mt-4 text-sm font-medium text-ink dark:text-slate-200">
+          {dragOver
+            ? "Release to upload"
+            : "Drop documents here or click to browse"}
+        </p>
+        <p className="mt-1 text-xs text-ink-muted dark:text-slate-500">
+          Multiple files allowed — they are queued and processed in order.
+        </p>
+        <ul className="mx-auto mt-4 flex max-w-2xl flex-wrap items-center justify-center gap-1.5">
+          {FORMATS.map((f) => (
+            <li
+              key={f}
+              className="rounded-md border border-coal-200 bg-canvas px-2 py-0.5 font-mono text-[11px] text-ink-muted dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+            >
+              {f}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <p className="mt-3 text-xs leading-relaxed text-ink-muted dark:text-slate-500">
+        Scanned PDFs/images need the OCR binary installed; born-digital PDFs and
+        spreadsheets extract without it. Each extracted figure carries its source
+        document and page.
+      </p>
+
+      {/* ---------- feedback ---------- */}
+      {uploading.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-2" aria-live="polite">
+          {uploading.map((name) => (
+            <span
+              key={name}
+              className="inline-flex items-center gap-1.5 rounded-full border border-coal-200 bg-white px-2.5 py-1 text-xs font-medium text-ink-muted shadow-card dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            >
+              <Icon name="refresh" size={12} className="animate-spin text-accent" />
+              Uploading {name}…
+            </span>
+          ))}
         </div>
+      )}
 
-        {uploading.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {uploading.map((name) => (
-              <span
-                key={name}
-                className="rounded-full bg-coal-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-medium text-coal-700 dark:text-slate-300"
-              >
-                Uploading {name}…
-              </span>
-            ))}
-          </div>
-        )}
+      {error && (
+        <div className="mt-4">
+          <AlertBanner tone="error">{error}</AlertBanner>
+        </div>
+      )}
+      {feedback && (
+        <div className="mt-4">
+          <AlertBanner tone="success">{feedback}</AlertBanner>
+        </div>
+      )}
 
-        {error && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-            {error}
-          </div>
-        )}
-        {feedback && (
-          <div className="mt-4 rounded-lg border border-source/20 bg-source-light px-3 py-2 text-sm text-source-dark dark:border-source/40 dark:bg-source/15 dark:text-emerald-300">
-            {feedback}
-          </div>
-        )}
-
-        {/* document table */}
-        <section className="mt-8">
-          <h2 className="text-base font-semibold text-coal-950 dark:text-slate-100">
-            Documents
-            <span className="ml-2 rounded-full bg-coal-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-medium text-coal-700 dark:text-slate-300">
+      {/* ---------- document list ---------- */}
+      <section className="mt-8">
+        <SectionHeader
+          title="Documents"
+          icon="file"
+          meta={
+            <span className="rounded-full bg-coal-100 px-2.5 py-0.5 text-xs font-medium text-ink-muted dark:bg-slate-800 dark:text-slate-400">
               {docs?.length ?? "…"}
             </span>
-          </h2>
+          }
+        />
 
-          {docs === null ? (
-            <div className="mt-3 rounded-2xl border border-coal-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center text-sm text-coal-400 dark:text-slate-500 shadow-card">
-              Loading documents…
-            </div>
-          ) : docs.length === 0 ? (
-            <div className="mt-3 rounded-2xl border border-coal-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center shadow-card">
-              <h3 className="text-sm font-semibold text-coal-800 dark:text-slate-200">
-                Nothing ingested yet
-              </h3>
-              <p className="mt-1 text-sm text-coal-400 dark:text-slate-500">
-                Upload a document above — extracted facts show up here, then
-                become answerable in Chat and reviewable in the Review Queue.
-              </p>
-            </div>
-          ) : (
-            <ul className="mt-3 grid gap-2">
-              {docs.map((doc) => (
-                <li
-                  key={doc.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-coal-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 shadow-card"
+        {docs === null ? (
+          <div className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-coal-200 bg-white p-10 text-sm text-ink-muted shadow-card dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+            <Icon name="refresh" size={14} className="animate-spin" />
+            Loading documents…
+          </div>
+        ) : docs.length === 0 ? (
+          <div className="mt-3">
+            <EmptyState
+              icon="upload"
+              title="Nothing ingested yet"
+              body="Upload a document above — extracted facts show up here, then become answerable in Chat and reviewable in the Review Queue."
+              action={
+                <button
+                  onClick={() => inputRef.current?.click()}
+                  className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-coal-950 dark:text-slate-100">
-                      {doc.filename}
-                    </p>
-                    <p className="mt-0.5 text-xs text-coal-400 dark:text-slate-500">
-                      #{doc.id} · {doc.source_type} · {formatDate(doc.upload_date)} ·{" "}
-                      {doc.fact_count} fact{doc.fact_count === 1 ? "" : "s"}
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${STATUS_BADGE[doc.status]}`}
-                  >
-                    {STATUS_LABEL[doc.status]}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </main>
-    </>
+                  Choose a file
+                </button>
+              }
+            />
+          </div>
+        ) : (
+          <div className="mt-3 overflow-hidden rounded-2xl border border-coal-200 bg-white shadow-card dark:border-slate-700 dark:bg-slate-900">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-coal-200 text-xs uppercase tracking-wide text-ink-muted dark:border-slate-700 dark:text-slate-500">
+                  <th scope="col" className="px-4 py-2.5 font-medium">Document</th>
+                  <th scope="col" className="hidden px-4 py-2.5 font-medium sm:table-cell">Source</th>
+                  <th scope="col" className="hidden px-4 py-2.5 font-medium md:table-cell">Uploaded</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Facts</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-coal-100 dark:divide-slate-800">
+                {docs.map((doc) => (
+                  <tr key={doc.id} className="transition-colors hover:bg-canvas dark:hover:bg-slate-800/60">
+                    <td className="max-w-0 px-4 py-3">
+                      <p className="flex items-center gap-2 truncate font-medium text-ink dark:text-slate-100">
+                        <Icon name="file" size={14} className="shrink-0 text-coal-400 dark:text-slate-500" />
+                        <span className="truncate">{doc.filename}</span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-ink-muted dark:text-slate-500 md:hidden">
+                        {doc.source_type} · {formatDate(doc.upload_date)}
+                      </p>
+                    </td>
+                    <td className="hidden px-4 py-3 text-sm text-ink-muted dark:text-slate-400 sm:table-cell">
+                      {doc.source_type}
+                    </td>
+                    <td className="hidden px-4 py-3 text-sm text-ink-muted dark:text-slate-400 md:table-cell">
+                      {formatDate(doc.upload_date)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm tabular-nums text-ink dark:text-slate-200">
+                      {doc.fact_count}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        {doc.status === "processing" && (
+                          <Icon name="refresh" size={12} className="animate-spin text-gap dark:text-amber-300" />
+                        )}
+                        <StatusBadge tone={STATUS_TONE[doc.status]} label={STATUS_LABEL[doc.status]} dot />
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </main>
   );
 }

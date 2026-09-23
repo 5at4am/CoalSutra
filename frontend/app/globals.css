@@ -13,6 +13,28 @@
     font-family: theme("fontFamily.sans");
   }
 
+  /* Visible, theme-aware focus for keyboard users (WCAG 2.4.7). */
+  :where(
+      a,
+      button,
+      input,
+      select,
+      textarea,
+      summary,
+      [role="button"],
+      [role="radio"],
+      [role="tab"]
+    ):focus-visible {
+    outline: 2px solid theme("colors.accent.ring");
+    outline-offset: 2px;
+    border-radius: theme("borderRadius.md");
+  }
+
+  ::selection {
+    background-color: theme("colors.accent.faint");
+    color: theme("colors.ink.DEFAULT");
+  }
+
   /* Respect users who prefer reduced motion. */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -20,6 +42,7 @@
     *::after {
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
   }
 }
