@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -16,10 +17,15 @@ from app.api.routes.topics import topics_router
 from app.core.config import settings
 from app.services.ingestion.jobs import resume_stale_jobs
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    resume_stale_jobs()
+    try:
+        resume_stale_jobs()
+    except Exception as exc:  # avoid blocking boot on a brief DB outage
+        logger.warning("resume_stale_jobs skipped: %s", exc)
     yield
 
 

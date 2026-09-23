@@ -10,7 +10,7 @@ import Icon from "@/components/Icon";
 import AlertBanner from "@/components/AlertBanner";
 import imgProvenance from "@/app/public/img-3C.png";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const QUERY_ENDPOINT = `${API_BASE}/api/v1/query`;
 
 type Message = {
