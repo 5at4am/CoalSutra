@@ -23,6 +23,7 @@ pymupdf==1.28.2
 
 # report generation (PDF export)
 reportlab==4.2.2
+python-docx==1.1.2
 
 # test fixture generation (digital PDFs)
 fpdf2==2.8.2

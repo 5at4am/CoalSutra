@@ -24,5 +24,23 @@ class Settings(BaseSettings):
 
     UPLOAD_DIR: str = "./uploads"
 
+    # Prototype authentication (HMAC-signed bearer tokens, no external deps).
+    # AUTH_ENABLED=false keeps the API fully open (used by the offline test
+    # suite; also handy for local dev). With AUTH_ENABLED=true every route
+    # except /auth/login and /health requires `Authorization: Bearer <token>`.
+    AUTH_ENABLED: bool = True
+    # Signing secret for tokens. Leave empty to use the bundled dev default —
+    # set a real value in production.
+    AUTH_SECRET: str = ""
+    # Demo users "username:password". Prototype only — plaintext on purpose so
+    # the POC can ship demo credentials; a real deployment needs a users table
+    # with hashed passwords.
+    DEMO_USERS: dict[str, str] = {
+        "admin": "admin123",
+        "analyst": "analyst123",
+        "reviewer": "reviewer123",
+    }
+    AUTH_TOKEN_TTL_SECONDS: int = 60 * 60 * 24 * 7
+
 
 settings = Settings()

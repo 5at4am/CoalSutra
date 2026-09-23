@@ -20,11 +20,18 @@ from app.schemas import ReportGenerate, ReportRead
 from app.services.reporting.exporter import export_report
 from app.services.reporting.generator import generate_report
 from app.services.reporting.lint import lint_sections
+from app.services.reporting.table_export import export_report_table
 from app.services.reporting.templates import get_template, list_templates as _list_templates
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+_EXTRA_MEDIA = {
+    "csv": "text/csv",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
 
 _NEXT_STATUS = {
     ReportStatus.draft: ReportStatus.reviewed,
@@ -100,20 +107,41 @@ def approve_report(report_id: int, db: Session = Depends(get_db)) -> Report:
 
 
 @router.get("/{report_id}/export")
-def export(report_id: int, db: Session = Depends(get_db)) -> FileResponse:
+def export(
+    report_id: int,
+    fmt: str = "pdf",
+    db: Session = Depends(get_db),
+) -> FileResponse:
     report = db.get(Report, report_id)
     if report is None:
         raise HTTPException(status_code=404, detail="report not found")
-    try:
-        path = export_report(report)
-    except Exception as exc:
-        logger.exception("api/reports/export: failed for report %s", report_id)
-        raise HTTPException(status_code=500, detail=f"pdf export failed: {exc}") from exc
+
+    if fmt == "pdf":
+        try:
+            path = export_report(report)
+        except Exception as exc:
+            logger.exception("api/reports/export: failed for report %s", report_id)
+            raise HTTPException(status_code=500, detail=f"pdf export failed: {exc}") from exc
+        media_type = "application/pdf"
+    else:
+        if fmt not in _EXTRA_MEDIA:
+            raise HTTPException(
+                status_code=400,
+                detail=f"unsupported export format '{fmt}' (pdf | csv | xlsx | docx)",
+            )
+        try:
+            path = export_report_table(report, fmt)
+        except Exception as exc:
+            logger.exception(
+                "api/reports/export: %s export failed for report %s", fmt, report_id
+            )
+            raise HTTPException(
+                status_code=500, detail=f"{fmt} export failed: {exc}"
+            ) from exc
+        media_type = _EXTRA_MEDIA[fmt]
 
     if report.export_path != path:
         report.export_path = path
         db.commit()
-    filename = f"report_{report.id}.pdf"
-    return FileResponse(
-        path, media_type="application/pdf", filename=filename
-    )
+    filename = f"report_{report.id}.{fmt}"
+    return FileResponse(path, media_type=media_type, filename=filename)

@@ -1,3 +1,9 @@
+from app.schemas.auth import (
+    AuthConfigResponse,
+    LoginRequest,
+    TokenResponse,
+    UserRead,
+)
 from app.schemas.common import HealthResponse
 from app.schemas.conflict import (
     ConflictFlagCreate,
@@ -21,6 +27,7 @@ from app.schemas.review import (
 from app.schemas.topic import TopicRead, TopicRunCreate, TopicRunRequest
 
 __all__ = [
+    "AuthConfigResponse",
     "Citation",
     "ConflictFlagCreate",
     "ConflictFlagRead",
@@ -36,6 +43,7 @@ __all__ = [
     "ExtractedFactRead",
     "FactQueueItem",
     "HealthResponse",
+    "LoginRequest",
     "MetricsSummaryRead",
     "QueryRequest",
     "QueryResponse",
@@ -44,7 +52,9 @@ __all__ = [
     "ReportGenerate",
     "ReportRead",
     "ReviewQueueRead",
+    "TokenResponse",
     "TopicRead",
     "TopicRunCreate",
     "TopicRunRequest",
+    "UserRead",
 ]

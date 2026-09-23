@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.deps import get_current_user
+from app.api.routes.auth import router as auth_router
 from app.api.routes.documents import router as documents_router
 from app.api.routes.facts import conflicts_router, facts_router
 from app.api.routes.health import router as health_router
@@ -21,7 +23,12 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.PROJECT_NAME, version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version="0.1.0",
+    lifespan=lifespan,
+    dependencies=[Depends(get_current_user)],
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,6 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router, prefix=settings.API_V1_PREFIX, tags=["auth"])
 app.include_router(health_router, prefix=settings.API_V1_PREFIX, tags=["health"])
 app.include_router(documents_router, prefix=settings.API_V1_PREFIX, tags=["documents"])
 app.include_router(facts_router, prefix=settings.API_V1_PREFIX, tags=["facts"])

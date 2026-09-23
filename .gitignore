@@ -29,3 +29,8 @@ Test_docs/*.p*.png
 .DS_Store
 *.log
 .kilo
+
+# local tooling / scratch files
+.opencode/
+_push_retry.py
+_truth.py

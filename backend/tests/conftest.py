@@ -7,8 +7,11 @@ import pytest
 
 # Hermetic test suite: force the offline pipeline before app modules import,
 # so extraction/embeddings never depend on a live (or real-keyed) provider.
+# Auth is disabled so the bulk of the suite exercises services, not the login
+# gate; auth behaviour is covered explicitly in test_auth.py.
 os.environ["LLM_API_KEY"] = ""
 os.environ["EMBEDDING_PROVIDER"] = "hash"
+os.environ["AUTH_ENABLED"] = "false"
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
