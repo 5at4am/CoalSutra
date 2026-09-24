@@ -1,4 +1,5 @@
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -22,10 +23,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    try:
-        resume_stale_jobs()
-    except Exception as exc:  # avoid blocking boot on a brief DB outage
-        logger.warning("resume_stale_jobs skipped: %s", exc)
+    def _resume_in_background():
+        try:
+            resume_stale_jobs()
+        except Exception as exc:  # avoid blocking boot on a brief DB outage
+            logger.warning("resume_stale_jobs skipped: %s", exc)
+
+    threading.Thread(target=_resume_in_background, daemon=True).start()
     yield
 
 
