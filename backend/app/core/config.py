@@ -1,8 +1,20 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+
+def _blank_env_values_fall_back_to_defaults(cls, values):
+    for field_name in cls.model_fields:
+        if values.get(field_name) in ("", None):
+            values.pop(field_name, None)
+    return values
 
 
 class Settings(BaseSettings):
     model_config = {"env_file": ".env", "extra": "ignore"}
+
+    _blank_env_fallback = model_validator(mode="before")(
+        classmethod(_blank_env_values_fall_back_to_defaults)
+    )
 
     DATABASE_URL: str = "postgresql+psycopg2://cmpdi:cmpdi@localhost:5432/cmpdi"
     LLM_API_KEY: str = ""
