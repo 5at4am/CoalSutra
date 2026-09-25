@@ -59,7 +59,8 @@ def test_token_roundtrip():
 
 def test_tampered_token_is_rejected():
     body, signature = create_token("admin").rsplit(".", 1)
-    assert verify_token(f"{body}.{signature[:-1]}0") != "admin"
+    with pytest.raises(InvalidTokenError):
+        verify_token(f"{body}.{signature[:-1]}0")
     with pytest.raises(InvalidTokenError):
         verify_token(f"{body}.deadbeef")
 

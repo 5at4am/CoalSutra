@@ -141,14 +141,6 @@ def run_job(job_id: int, session_factory: Any | None = None) -> IngestionJob | N
         session.commit()
         logger.info("jobs: job %s succeeded", job.id)
         return job
-
-        job.status = JobStatus.succeeded
-        job.next_attempt_at = None
-        if document is not None and document.status != DocumentStatus.processed:
-            document.status = DocumentStatus.processed
-        session.commit()
-        logger.info("jobs: job %s succeeded", job.id)
-        return job
     except Exception:  # noqa: BLE001
         logger.exception("jobs: run_job %s crashed", job_id)
         session.rollback()
