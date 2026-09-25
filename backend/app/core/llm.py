@@ -20,11 +20,13 @@ import json
 import logging
 import math
 import re
+import time
 
 import httpx
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import settings
+from app.services.usage import current_context, record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,14 @@ def _parse_json_content(content: str, schema: type[BaseModel]) -> BaseModel:
 
 
 def call_llm(prompt: str, response_schema: type[BaseModel]) -> BaseModel:
-    """Send ``prompt`` to the configured model and validate against ``response_schema``."""
+    """Send ``prompt`` to the configured model and validate against ``response_schema``.
+
+    Every round-trip is persisted as a usage row (tokens, latency, success) by
+    ``app.services.usage``; failures are recorded too, and recording never alters
+    the raise path. The endpoint/label set around the caller via ``llm_context``
+    flows here through a context variable, so callers (query route, evaluator)
+    get per-feature token attribution for free.
+    """
     if not settings.LLM_API_KEY:
         raise LLMDisabledError("LLM_API_KEY is not configured")
 
@@ -65,6 +74,20 @@ def call_llm(prompt: str, response_schema: type[BaseModel]) -> BaseModel:
         "temperature": 0,
         "messages": [{"role": "user", "content": prompt}],
     }
+    start = time.perf_counter()
+    endpoint, label = current_context()
+
+    def _record(success: bool, error: str | None = None, **tokens) -> None:
+        record_usage(
+            endpoint=endpoint,
+            prompt_label=label or prompt[:120],
+            model=settings.LLM_MODEL,
+            latency_ms=(time.perf_counter() - start) * 1000,
+            success=success,
+            error=error,
+            **tokens,
+        )
+
     try:
         with httpx.Client(timeout=settings.LLM_TIMEOUT) as client:
             resp = client.post(
@@ -75,15 +98,29 @@ def call_llm(prompt: str, response_schema: type[BaseModel]) -> BaseModel:
             resp.raise_for_status()
             data = resp.json()
     except (httpx.HTTPError, ValueError) as exc:
+        _record(False, str(exc))
         raise LLMError(f"provider request failed: {exc}") from exc
 
+    usage = data.get("usage") if isinstance(data, dict) else {}
     try:
         content = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
+        _record(False, f"unexpected provider response shape: {data!r}")
         raise LLMError(f"unexpected provider response shape: {data!r}") from exc
 
+    try:
+        parsed = _parse_json_content(content, response_schema)
+    except LLMError as exc:
+        _record(False, str(exc))
+        raise
+
+    _record(
+        True,
+        prompt_tokens=int(usage.get("prompt_tokens") or 0),
+        completion_tokens=int(usage.get("completion_tokens") or 0),
+    )
     logger.debug("call_llm: model=%s chars=%d", settings.LLM_MODEL, len(content))
-    return _parse_json_content(content, response_schema)
+    return parsed
 
 
 def json_dumps(obj) -> str:

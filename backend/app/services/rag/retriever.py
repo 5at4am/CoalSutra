@@ -168,7 +168,7 @@ def _cosine_candidates(
     scored: list[dict] = []
     for chunk in chunks:
         vec = chunk.get("embedding")
-        if not vec:
+        if vec is None or not len(vec):  # works for lists, Vector, and ndarrays
             continue
         norm = math.sqrt(sum(x * x for x in vec))
         if not norm:

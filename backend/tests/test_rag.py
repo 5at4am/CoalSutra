@@ -15,6 +15,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import settings
 from app.core.database import Base, get_db
 from app.main import app
 from app.models import Document
@@ -33,7 +34,10 @@ _KEYWORDS = {"reserve": 0, "ash": 1, "moisture": 2}
 
 
 def fake_embed(text: str) -> list[float]:
-    vec = [0.0, 0.0, 0.0]
+    # Padded to the schema's embedding dimension (the Vector column validates
+    # the length even on SQLite); only the keyword slots are non-zero, so
+    # cosine similarity behaves exactly like the 3-dim version.
+    vec = [0.0] * settings.EMBEDDING_DIM
     for token in re.findall(r"[a-z0-9]+", text.lower()):
         index = _KEYWORDS.get(token)
         if index is not None:
@@ -125,7 +129,7 @@ def test_embed_and_store_chunks_persists_chunk_per_page(session_factory):
         chunks = session.query(DocumentChunk).order_by(DocumentChunk.page_number).all()
         assert [c.page_number for c in chunks] == [1, 2]
         assert chunks[0].embedding is not None
-        assert len(chunks[0].embedding) == 3
+        assert len(chunks[0].embedding) == settings.EMBEDDING_DIM
 
 
 # --- retriever -------------------------------------------------------------

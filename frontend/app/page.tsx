@@ -81,6 +81,15 @@ const MODULES: {
     cta: "Open dashboard",
   },
   {
+    href: "/evaluate",
+    icon: "gauge",
+    title: "Evaluate & spend",
+    description:
+      "Score the query engine against a golden question set and watch token usage, latency and estimated cost per call.",
+    points: ["Golden-set accuracy", "Token & cost telemetry", "Per-endpoint breakdown"],
+    cta: "Open evaluate",
+  },
+  {
     href: "/review",
     icon: "review",
     title: "Review queue",

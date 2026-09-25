@@ -7,6 +7,7 @@ export type IconName =
   | "report"
   | "chart"
   | "review"
+  | "gauge"
   | "search"
   | "send"
   | "refresh"
@@ -38,6 +39,13 @@ const PATHS: Record<IconName, ReactNode> = {
   report: <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8ZM14 2v6h6M16 13H8M16 17H8M10 9H8" />,
   chart: <path d="M3 3v18h18M7 14.5V11m4 3.5V7m4 7.5V9m4 5.5V5" />,
   review: <path d="M9 12l2 2 4-4M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />,
+  gauge: (
+    <>
+      <path d="M4 15a8 8 0 1 1 16 0" />
+      <path d="M12 15l3.5-4.5" />
+      <path d="M4 19h16" />
+    </>
+  ),
   search: <path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm10 2-4.2-4.2" />,
   send: <path d="m22 2-7 20-4-9-9-4 20-7ZM11 13l11-11" />,
   refresh: <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />,

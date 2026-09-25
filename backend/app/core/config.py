@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_BASE_URL: str = "https://api.openai.com/v1"
     LLM_TIMEOUT: float = 60.0
+    # Listed USD-per-1M-token prices used by the Evaluate dashboard to estimate
+    # spend from recorded usage. Defaults match gpt-4o-mini; override to match
+    # the actual provider/model (e.g. Groq or a self-hosted gateway).
+    LLM_PRICE_PER_1M_INPUT_USD: float = 0.15
+    LLM_PRICE_PER_1M_OUTPUT_USD: float = 0.60
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIM: int = 1536
     # "api"  → request embeddings from LLM_BASE_URL/embeddings (OpenAI-compatible)

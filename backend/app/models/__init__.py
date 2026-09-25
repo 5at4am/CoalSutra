@@ -10,8 +10,10 @@ from app.models.enums import (
     ReportStatus,
     SourceType,
 )
+from app.models.eval_run import EvalRun
 from app.models.fact import ExtractedFact
 from app.models.job import IngestionJob
+from app.models.llm_usage import LLMUsage
 from app.models.report import Report
 from app.models.topic import TopicRun
 
@@ -23,9 +25,11 @@ __all__ = [
     "DocumentChunk",
     "DocumentPage",
     "DocumentStatus",
+    "EvalRun",
     "ExtractedFact",
     "IngestionJob",
     "JobStatus",
+    "LLMUsage",
     "Report",
     "ReportStatus",
     "SourceType",
