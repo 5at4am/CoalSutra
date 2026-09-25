@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import get_current_user
 from app.api.routes.auth import router as auth_router
@@ -58,6 +60,15 @@ app.include_router(reports_router, prefix=settings.API_V1_PREFIX, tags=["reports
 app.include_router(topics_router, prefix=settings.API_V1_PREFIX, tags=["topics"])
 app.include_router(review_router, prefix=settings.API_V1_PREFIX, tags=["review"])
 app.include_router(metrics_router, prefix=settings.API_V1_PREFIX, tags=["metrics"])
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_error_handler(_request, exc: SQLAlchemyError) -> JSONResponse:
+    logger.error("database request failed: %s", exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database unavailable, please try again later."},
+    )
 
 
 @app.get("/")
